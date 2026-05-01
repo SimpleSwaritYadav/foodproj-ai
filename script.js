@@ -1,40 +1,80 @@
-async function sendMessage() {
-    let input = document.getElementById("userInput").value;
-    let messages = document.getElementById("messages");
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
 
-    if (input.trim() === "") return;
+dotenv.config();
 
-    let userMsg = document.createElement("p");
-    userMsg.innerText = "You: " + input;
-    messages.appendChild(userMsg);
+const app = express();
+const limiter = rateLimit({
+    windowMs: 1 * 60 * 1000,
+    max: 10,
+    message: "Too many requests. Please try again after 1 minute."
+});
 
-    let botMsg = document.createElement("p");
-    botMsg.innerText = "Bot: Thinking...";
-    messages.appendChild(botMsg);
+app.use(limiter);
+
+app.use(express.static("."));
+app.use(cors({
+    origin: "https://foodproj-ai.onrender.com"
+}));
+app.use(express.json());
+
+app.post("/chat", async (req, res) => {
+    const userMessage = req.body.message;
 
     try {
-        const response = await fetch("/chat", {
+        const response = await fetch("https://router.huggingface.co/v1/chat/completions", {
             method: "POST",
             headers: {
+                "Authorization": `Bearer ${process.env.HF_TOKEN}`,
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ message: input })
+            body: JSON.stringify({
+                model: "meta-llama/Meta-Llama-3-8B-Instruct",
+                messages: [
+                    {
+                        role: "system",
+                        content: `You are FoodSaver AI Bot for SDG 2: Zero Hunger.
+
+Your job:
+- Help users cook meals using food they already have
+- Suggest affordable meals
+- Suggest high protein or low carb meals if asked
+- Help reduce food waste
+- Give leftover food ideas
+- Give food donation guidance
+- Keep answers simple, practical, and student-friendly
+
+Rules:
+- Only answer questions related to food, cooking, nutrition, hunger, leftovers, food waste, affordable meals, and food donation.
+- If the user asks anything unrelated, politely say you only help with food and SDG 2 Zero Hunger topics.
+- Do not give medical advice.`
+                    },
+                    {
+                        role: "user",
+                        content: userMessage
+                    }
+                ],
+                max_tokens: 300
+            })
         });
 
         const data = await response.json();
-        botMsg.innerText = "Bot: " + data.reply;
+
+        if (!response.ok) {
+            console.log("HF ERROR:", data);
+            return res.json({ reply: "AI error. Check terminal." });
+        }
+
+        res.json({ reply: data.choices[0].message.content });
 
     } catch (error) {
-        botMsg.innerText = "Bot: Website error. Server not connected.";
-        console.log(error);
+        console.log("SERVER ERROR:", error);
+        res.json({ reply: "Server error. Please try again." });
     }
+});
 
-    document.getElementById("userInput").value = "";
-    messages.scrollTop = messages.scrollHeight;
-}
-
-function handleKey(event) {
-    if (event.key === "Enter") {
-        sendMessage();
-    }
-}
+app.listen(3000, () => {
+    console.log("Server running on http://localhost:3000");
+});
