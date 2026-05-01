@@ -1,13 +1,23 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
 
 dotenv.config();
 
 const app = express();
+const limiter = rateLimit({
+    windowMs: 1 * 60 * 1000,
+    max: 10,
+    message: "Too many requests. Please try again after 1 minute."
+});
+
+app.use(limiter);
 
 app.use(express.static("."));
-app.use(cors());
+app.use(cors({
+    origin: "https://foodproj-ai.onrender.com"
+}));
 app.use(express.json());
 
 app.post("/chat", async (req, res) => {
@@ -65,6 +75,6 @@ Rules:
     }
 });
 
-app.listen(3000, () => {
-    console.log("Server running on http://localhost:3000");
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Server running");
 });
